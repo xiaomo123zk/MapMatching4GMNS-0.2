@@ -1,0 +1,8 @@
+ I searched for a solution to the problem of missing dependent files when calling DLL in python. The method given on the blog is to find all the dependent files of the DLL, 
+ and then copy these dependencies to C:\Windows\System32. Note here that if there are some dependencies in the C:\Windows\System32, 
+ you only need to copy the dependencies that are not. I used this method to run the code without installed a C++ environment. 
+ If VS is not installed on your computer, I will send you the DLL dependency and test code. You can try it on a windows computer.
+ 
+ 
+ This folder is the absent dependencies about mapmatching4gmns.
+ If your computer have some dependencies in the C:\Windows\System32, you only need to copy the dependencies that are not
