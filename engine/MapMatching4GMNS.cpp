@@ -1,23 +1,29 @@
-// trace2route.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// MapMatching4GMNS.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
 //Your code uses a function, class member, variable, or typedef that's marked deprecated. Symbols are deprecated by using a __declspec(deprecated) modifier, or the C++14 [[deprecated]] attribute. The actual C4996 warning message is specified
 //by the deprecated modifier or attribute of the declaration.
-//#include "MapMatching4GMNS.h"
+
 #pragma warning(disable : 4996)
 
-#include "stdafx.h"
+// #include "stdafx.h"
+#include "MapMatching4GMNS.h"
 //#ifdef _WIN32
 //#include "pch.h"
 //#endif
-
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <list>
+#include <map>
 //#include <omp.h>
+#include <sstream>
+#include <stdio.h>
+#include <string>
+#include <vector>
 //#include <time.h>
-#include "CSVParser.h"
+// #include "CSVParser.h"
 #include <ctime>
 //#include <math.h>
 #include <cmath>
@@ -50,6 +56,417 @@ using std::min;
 map<int, int> g_internal_node_seq_no_map;
 map<int, int> g_internal_link_no_map;
 map<string, int> g_internal_agent_no_map;
+
+using std::ifstream;
+using std::istringstream;
+using std::map;
+using std::string;
+using std::vector;
+
+template <typename T>
+
+#pragma warning(disable : 4244) // stop warning: "conversion from 'int' to 'float', possible loss of data"
+
+string NumberToString(T Number)
+{
+  ostringstream ss;
+  ss << Number;
+  return ss.str();
+}
+
+template <typename T>
+T StringToNumber(const string &Text)
+{
+  istringstream ss(Text);
+  T result;
+  return ss >> result ? result : 0;
+}
+class CCSVParser
+{
+public:
+  char Delimiter;
+  bool IsFirstLineHeader;
+  ifstream inFile;
+  vector<string> LineFieldsValue;
+  vector<string> Headers;
+  map<string, int> FieldsIndices;
+
+  vector<int> LineIntegerVector;
+
+public:
+  void ConvertLineStringValueToIntegers()
+  {
+    LineIntegerVector.clear();
+    for (unsigned i = 0; i < LineFieldsValue.size(); i++)
+    {
+      std::string si = LineFieldsValue[i];
+      int value = atoi(si.c_str());
+
+      if (value >= 1)
+        LineIntegerVector.push_back(value);
+    }
+  }
+  vector<string> GetHeaderVector()
+  {
+    return Headers;
+  }
+
+  int m_EmptyLineCount;
+  bool m_bDataHubSingleCSVFile;
+  string m_DataHubSectionName;
+  bool m_bLastSectionRead;
+
+  bool m_bSkipFirstLine; // for DataHub CSV files
+
+  CCSVParser(void)
+  {
+    Delimiter = ',';
+    IsFirstLineHeader = true;
+    m_bSkipFirstLine = false;
+    m_bDataHubSingleCSVFile = false;
+    m_bLastSectionRead = false;
+    m_EmptyLineCount++;
+  }
+
+  ~CCSVParser(void)
+  {
+    if (inFile.is_open())
+      inFile.close();
+  }
+
+  bool OpenCSVFile(string fileName, bool bIsFirstLineHeader)
+  {
+    inFile.clear();
+    inFile.open(fileName.c_str());
+
+    IsFirstLineHeader = bIsFirstLineHeader;
+    if (inFile.is_open())
+    {
+      if (m_bSkipFirstLine)
+      {
+        string s;
+        std::getline(inFile, s);
+      }
+      if (IsFirstLineHeader)
+      {
+        string s;
+        std::getline(inFile, s);
+
+        if (s.length() == 0)
+          return true;
+
+        vector<string> FieldNames = ParseLine(s);
+
+        for (size_t i = 0; i < FieldNames.size(); i++)
+        {
+          string tmp_str = FieldNames.at(i);
+          size_t start = tmp_str.find_first_not_of(" ");
+
+          string name;
+          if (start == string::npos)
+          {
+            name = "";
+          }
+          else
+          {
+            name = tmp_str.substr(start);
+            //TRACE("%s,", name.c_str());
+          }
+          Headers.push_back(name);
+          FieldsIndices[name] = (int)i;
+        }
+      }
+
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  void CloseCSVFile(void)
+  {
+    inFile.close();
+  }
+
+  bool ReadRecord()
+  {
+    LineFieldsValue.clear();
+
+    if (inFile.is_open())
+    {
+      string s;
+      std::getline(inFile, s);
+      if (s.length() > 0)
+      {
+        LineFieldsValue = ParseLine(s);
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  vector<string> ParseLine(string line)
+  {
+    vector<string> SeperatedStrings;
+    string subStr;
+
+    if (line.length() == 0)
+      return SeperatedStrings;
+
+    istringstream ss(line);
+
+    if (line.find_first_of('"') == string::npos)
+    {
+
+      while (std::getline(ss, subStr, Delimiter))
+      {
+        SeperatedStrings.push_back(subStr);
+      }
+
+      if (line.at(line.length() - 1) == ',')
+      {
+        SeperatedStrings.push_back("");
+      }
+    }
+    else
+    {
+      while (line.length() > 0)
+      {
+        size_t n1 = line.find_first_of(',');
+        size_t n2 = line.find_first_of('"');
+
+        if (n1 == string::npos && n2 == string::npos) //last field without double quotes
+        {
+          subStr = line;
+          SeperatedStrings.push_back(subStr);
+          break;
+        }
+
+        if (n1 == string::npos && n2 != string::npos) //last field with double quotes
+        {
+          size_t n3 = line.find_first_of('"', n2 + 1); // second double quote
+
+          //extract content from double quotes
+          subStr = line.substr(n2 + 1, n3 - n2 - 1);
+          SeperatedStrings.push_back(subStr);
+
+          break;
+        }
+
+        if (n1 != string::npos && (n1 < n2 || n2 == string::npos))
+        {
+          subStr = line.substr(0, n1);
+          SeperatedStrings.push_back(subStr);
+          if (n1 < line.length() - 1)
+          {
+            line = line.substr(n1 + 1);
+          }
+          else // comma is the last char in the line string, push an empty string to the back of vector
+          {
+            SeperatedStrings.push_back("");
+            break;
+          }
+        }
+
+        if (n1 != string::npos && n2 != string::npos && n2 < n1)
+        {
+          size_t n3 = line.find_first_of('"', n2 + 1); // second double quote
+          subStr = line.substr(n2 + 1, n3 - n2 - 1);
+          SeperatedStrings.push_back(subStr);
+          size_t idx = line.find_first_of(',', n3 + 1);
+
+          if (idx != string::npos)
+          {
+            line = line.substr(idx + 1);
+          }
+          else
+          {
+            break;
+          }
+        }
+      }
+    }
+
+    return SeperatedStrings;
+  }
+
+  template <class T>
+  bool GetValueByFieldName(string field_name, T &value, bool NonnegativeFlag = true)
+  {
+    if (FieldsIndices.find(field_name) == FieldsIndices.end())
+    {
+      return false;
+    }
+    else
+    {
+      if (LineFieldsValue.size() == 0)
+      {
+        return false;
+      }
+
+      int size = (int)(LineFieldsValue.size());
+      if (FieldsIndices[field_name] >= size)
+      {
+        return false;
+      }
+
+      string str_value = LineFieldsValue[FieldsIndices[field_name]];
+
+      if (str_value.length() <= 0)
+      {
+        return false;
+      }
+
+      istringstream ss(str_value);
+
+      T converted_value;
+      ss >> converted_value;
+
+      if (/*!ss.eof() || */ ss.fail())
+      {
+        return false;
+      }
+
+      //if (NonnegativeFlag && converted_value<0)
+      //	converted_value = 0;
+
+      value = converted_value;
+      return true;
+    }
+  }
+
+  bool GetValueByFieldName(string field_name, string &value)
+  {
+    if (FieldsIndices.find(field_name) == FieldsIndices.end())
+    {
+      return false;
+    }
+    else
+    {
+      if (LineFieldsValue.size() == 0)
+      {
+        return false;
+      }
+
+      unsigned int index = FieldsIndices[field_name];
+      if (index >= LineFieldsValue.size())
+      {
+        return false;
+      }
+      string str_value = LineFieldsValue[index];
+
+      if (str_value.length() <= 0)
+      {
+        return false;
+      }
+
+      value = str_value;
+      return true;
+    }
+  }
+
+  template <class T>
+  bool GetValueBySectionKeyFieldName(string file_name, string section_name, string key_name, string field_name, T &value)
+  {
+    OpenCSVFile(file_name, true);
+
+    while (ReadRecord())
+    {
+      if (LineFieldsValue[0] != section_name || LineFieldsValue[1] != key_name)
+        continue;
+
+      if (FieldsIndices.find(field_name) == FieldsIndices.end())
+      {
+        CloseCSVFile();
+        return false;
+      }
+      else
+      {
+        if (LineFieldsValue.size() == 0)
+        {
+          CloseCSVFile();
+          return false;
+        }
+
+        int size = (int)(LineFieldsValue.size());
+        if (FieldsIndices[field_name] >= size)
+        {
+          CloseCSVFile();
+          return false;
+        }
+
+        string str_value = LineFieldsValue[FieldsIndices[field_name]];
+
+        if (str_value.length() <= 0)
+        {
+          CloseCSVFile();
+          return false;
+        }
+
+        istringstream ss(str_value);
+
+        T converted_value;
+        ss >> converted_value;
+
+        if (/*!ss.eof() || */ ss.fail())
+        {
+
+          CloseCSVFile();
+          return false;
+        }
+
+        value = converted_value;
+        CloseCSVFile();
+        return true;
+      }
+    }
+
+    CloseCSVFile();
+
+    return false;
+  }
+};
+
+template <typename T>
+T **Allocate2DDynamicArray(int nRows, int nCols)
+{
+  T **dynamicArray;
+
+  dynamicArray = new T *[nRows];
+
+  for (int i = 0; i < nRows; i++)
+  {
+    dynamicArray[i] = new T[nCols];
+
+    if (dynamicArray[i] == NULL)
+    {
+      cout << "Error: insufficent memory.";
+      exit(0);
+    }
+  }
+
+  return dynamicArray;
+}
+
+template <typename T>
+void Deallocate2DDynamicArray(T **dArray, int nRows)
+{
+  for (int x = 0; x < nRows; x++)
+  {
+    delete[] dArray[x];
+  }
+
+  delete[] dArray;
+}
 
 extern void g_Program_stop();
 extern void g_OutputInputAgentCSVFile();
@@ -387,7 +804,7 @@ double g_GetPoint2LineDistance(const GDPoint *pt, const GDPoint *FromPt, const G
   {
 
     if (U < 0.0 || U > 1.0)
-      return max(UnitMile * 100, 999999); // intersection does not fall within the segment
+      return UnitMile * 100 > 999999 ? UnitMile * 100 : 999999; // intersection does not fall within the segment
   }
   Intersection.x = ToPt->x + U * (FromPt->x - ToPt->x);
   Intersection.y = ToPt->y + U * (FromPt->y - ToPt->y);
@@ -622,7 +1039,7 @@ public:
   {
 
     m_GridMatrix = Allocate2DDynamicArray<GridNodeSet>(MAX_GRID_SIZE_, MAX_GRID_SIZE_);
-    g_grid_size = max(1, min(MAX_GRID_SIZE_, g_node_vector.size() / 3000)); // dynamically determine the size of grid. e.g. for a testing network <100 nodes, use a grid size of 1.
+    g_grid_size = max(1, int(min(MAX_GRID_SIZE_, int(g_node_vector.size() / 3000)))); // dynamically determine the size of grid. e.g. for a testing network <100 nodes, use a grid size of 1.
     // g_grid_size is the number of cells horizonatally or virtically
     cout << "grid size = " << g_grid_size << endl;
 
@@ -750,7 +1167,8 @@ public:
       }
     }
 
-    g_agent_vector[agent_no].avg_GPS_segment_distance = total_GPS_distance / max(1, g_agent_vector[agent_no].m_GPSPointVector.size() - 1);
+    double max_value = 1 > g_agent_vector[agent_no].m_GPSPointVector.size() - 1 ? 1 : g_agent_vector[agent_no].m_GPSPointVector.size() - 1;
+    g_agent_vector[agent_no].avg_GPS_segment_distance = total_GPS_distance / max_value;
 
     // first step, determine the inside flag
 
@@ -1915,7 +2333,7 @@ void g_OutputRouteCSVFile()
         //travel time
         fprintf(g_pFileLinkRoute, "%d,", max(0, travel_time_in_second));
         //delay
-        int delay = max(0, travel_time_in_second - g_link_vector[link_no].FFTT_in_sec);
+        int delay = max(0, int(travel_time_in_second - g_link_vector[link_no].FFTT_in_sec));
         fprintf(g_pFileLinkRoute, "%d,", delay);
 
         travel_time_in_second = max(1, travel_time_in_second);
