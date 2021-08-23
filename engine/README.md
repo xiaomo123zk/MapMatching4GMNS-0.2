@@ -7,13 +7,19 @@ The legacy source and binary files are all deprecated and moved to the [archive 
 ## Build MapMatching4GMNS
 We use the cross-platform tool CMake to define the building process.
 
-*Build the executable using CMake and run it with NEXTA*
+*Build the executable using CMake and run it on Windows system or Liunx system*
 ```
 # from the root directory of engine (i.e., MapMatching4GMNS/engine)
 $ mkdir build
 $ cd build
 $ cmake .. -DBUILD_EXE=ON
 $ cmake --build .
+```
+*Build the executable using CMake and run it on Mac system*
+```
+# from the root directory of engine (i.e., MapMatching4GMNS/engine)
+$ g++ -shared -fPIC -o MapMatching4GMNS.dylib MapMatching4GMNS.cpp
+$ g++ -shared -fPIC -o MapMatching4GMNS.dylib MapMatching4GMNS.cpp
 ```
 
 You can remove -DBUILD_EXE=ON or -DBUILD_EXE=OFF if you prefer to manually change the value of BUILD_EXE in [CMakeLists.txt](https://github.com/xiaomo123zk/MapMatching4GMNS/blob/main/engine/CMakeLists.txt).
