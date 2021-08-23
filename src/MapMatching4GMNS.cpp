@@ -5,22 +5,30 @@
 //by the deprecated modifier or attribute of the declaration.
 //#include "MapMatching4GMNS.h"
 #pragma warning(disable : 4996)
-
-#include "stdafx.h"
+#include "MapMatching4GMNS.h"
+// #include "stdafx.h"
 //#ifdef _WIN32
 //#include "pch.h"
 //#endif
-
 #include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <list>
+#include <map>
+#include <sstream>
+#include <stdio.h>
+#include <string>
+#include <vector>
 //#include <omp.h>
 //#include <time.h>
-#include "CSVParser.h"
+// #include "CSVParser.h"
+
+//#include <tchar.h>
+
 #include <ctime>
 //#include <math.h>
 #include <cmath>
+#include <cstring>
 
 using namespace std;
 
@@ -28,6 +36,7 @@ using namespace std;
 #define MAX_GRID_SIZE_ 1000
 
 #define PI_ 3.1415
+
 float g_NonHitDistanceRatio = 10;
 
 float g_GridResolution = 0.005;            // in terms of long/lat
@@ -52,8 +61,13 @@ constexpr auto g_number_of_links = 0;
 constexpr auto g_number_of_agents = 0;
 constexpr auto g_grid_size = 1;
 */
+using std::ifstream;
+using std::istringstream;
+using std::map;
 using std::max;
 using std::min;
+using std::string;
+using std::vector;
 //std::map<int, int> g_internal_node_seq_no_map;
 //std::map<int, int> g_internal_link_no_map;
 //std::map<string, int> g_internal_agent_no_map;
@@ -61,7 +75,413 @@ using std::min;
 map<int, int> g_internal_node_seq_no_map;
 map<int, int> g_internal_link_no_map;
 map<string, int> g_internal_agent_no_map;
-map<__int64, int> g_cell_id_2_zone_id_map; // cell 2 zone mapping
+// map<__int64, int> g_cell_id_2_zone_id_map; // cell 2 zone mapping
+map<long long, int> g_cell_id_2_zone_id_map; // cell 2 zone mapping
+
+template <typename T>
+
+#pragma warning(disable : 4244) // stop warning: "conversion from 'int' to 'float', possible loss of data"
+
+string NumberToString(T Number)
+{
+  ostringstream ss;
+  ss << Number;
+  return ss.str();
+}
+
+template <typename T>
+T StringToNumber(const string &Text)
+{
+  istringstream ss(Text);
+  T result;
+  return ss >> result ? result : 0;
+}
+class CCSVParser
+{
+public:
+  char Delimiter;
+  bool IsFirstLineHeader;
+  ifstream inFile;
+  vector<string> LineFieldsValue;
+  vector<string> Headers;
+  map<string, int> FieldsIndices;
+
+  vector<int> LineIntegerVector;
+
+public:
+  void ConvertLineStringValueToIntegers()
+  {
+    LineIntegerVector.clear();
+    for (unsigned i = 0; i < LineFieldsValue.size(); i++)
+    {
+      std::string si = LineFieldsValue[i];
+      int value = atoi(si.c_str());
+
+      if (value >= 1)
+        LineIntegerVector.push_back(value);
+    }
+  }
+  vector<string> GetHeaderVector()
+  {
+    return Headers;
+  }
+
+  int m_EmptyLineCount;
+  bool m_bDataHubSingleCSVFile;
+  string m_DataHubSectionName;
+  bool m_bLastSectionRead;
+
+  bool m_bSkipFirstLine; // for DataHub CSV files
+
+  CCSVParser(void)
+  {
+    Delimiter = ',';
+    IsFirstLineHeader = true;
+    m_bSkipFirstLine = false;
+    m_bDataHubSingleCSVFile = false;
+    m_bLastSectionRead = false;
+    m_EmptyLineCount++;
+  }
+
+  ~CCSVParser(void)
+  {
+    if (inFile.is_open())
+      inFile.close();
+  }
+
+  bool OpenCSVFile(string fileName, bool bIsFirstLineHeader)
+  {
+    inFile.clear();
+    inFile.open(fileName.c_str());
+
+    IsFirstLineHeader = bIsFirstLineHeader;
+    if (inFile.is_open())
+    {
+      if (m_bSkipFirstLine)
+      {
+        string s;
+        std::getline(inFile, s);
+      }
+      if (IsFirstLineHeader)
+      {
+        string s;
+        std::getline(inFile, s);
+
+        if (s.length() == 0)
+          return true;
+
+        vector<string> FieldNames = ParseLine(s);
+
+        for (size_t i = 0; i < FieldNames.size(); i++)
+        {
+          string tmp_str = FieldNames.at(i);
+          size_t start = tmp_str.find_first_not_of(" ");
+
+          string name;
+          if (start == string::npos)
+          {
+            name = "";
+          }
+          else
+          {
+            name = tmp_str.substr(start);
+            //TRACE("%s,", name.c_str());
+          }
+          Headers.push_back(name);
+          FieldsIndices[name] = (int)i;
+        }
+      }
+
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  void CloseCSVFile(void)
+  {
+    inFile.close();
+  }
+
+  bool ReadRecord()
+  {
+    LineFieldsValue.clear();
+
+    if (inFile.is_open())
+    {
+      string s;
+      std::getline(inFile, s);
+      if (s.length() > 0)
+      {
+        LineFieldsValue = ParseLine(s);
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  vector<string> ParseLine(string line)
+  {
+    vector<string> SeperatedStrings;
+    string subStr;
+
+    if (line.length() == 0)
+      return SeperatedStrings;
+
+    istringstream ss(line);
+
+    if (line.find_first_of('"') == string::npos)
+    {
+
+      while (std::getline(ss, subStr, Delimiter))
+      {
+        SeperatedStrings.push_back(subStr);
+      }
+
+      if (line.at(line.length() - 1) == ',')
+      {
+        SeperatedStrings.push_back("");
+      }
+    }
+    else
+    {
+      while (line.length() > 0)
+      {
+        size_t n1 = line.find_first_of(',');
+        size_t n2 = line.find_first_of('"');
+
+        if (n1 == string::npos && n2 == string::npos) //last field without double quotes
+        {
+          subStr = line;
+          SeperatedStrings.push_back(subStr);
+          break;
+        }
+
+        if (n1 == string::npos && n2 != string::npos) //last field with double quotes
+        {
+          size_t n3 = line.find_first_of('"', n2 + 1); // second double quote
+
+          //extract content from double quotes
+          subStr = line.substr(n2 + 1, n3 - n2 - 1);
+          SeperatedStrings.push_back(subStr);
+
+          break;
+        }
+
+        if (n1 != string::npos && (n1 < n2 || n2 == string::npos))
+        {
+          subStr = line.substr(0, n1);
+          SeperatedStrings.push_back(subStr);
+          if (n1 < line.length() - 1)
+          {
+            line = line.substr(n1 + 1);
+          }
+          else // comma is the last char in the line string, push an empty string to the back of vector
+          {
+            SeperatedStrings.push_back("");
+            break;
+          }
+        }
+
+        if (n1 != string::npos && n2 != string::npos && n2 < n1)
+        {
+          size_t n3 = line.find_first_of('"', n2 + 1); // second double quote
+          subStr = line.substr(n2 + 1, n3 - n2 - 1);
+          SeperatedStrings.push_back(subStr);
+          size_t idx = line.find_first_of(',', n3 + 1);
+
+          if (idx != string::npos)
+          {
+            line = line.substr(idx + 1);
+          }
+          else
+          {
+            break;
+          }
+        }
+      }
+    }
+
+    return SeperatedStrings;
+  }
+
+  template <class T>
+  bool GetValueByFieldName(string field_name, T &value, bool NonnegativeFlag = true)
+  {
+    if (FieldsIndices.find(field_name) == FieldsIndices.end())
+    {
+      return false;
+    }
+    else
+    {
+      if (LineFieldsValue.size() == 0)
+      {
+        return false;
+      }
+
+      int size = (int)(LineFieldsValue.size());
+      if (FieldsIndices[field_name] >= size)
+      {
+        return false;
+      }
+
+      string str_value = LineFieldsValue[FieldsIndices[field_name]];
+
+      if (str_value.length() <= 0)
+      {
+        return false;
+      }
+
+      istringstream ss(str_value);
+
+      T converted_value;
+      ss >> converted_value;
+
+      if (/*!ss.eof() || */ ss.fail())
+      {
+        return false;
+      }
+
+      //if (NonnegativeFlag && converted_value<0)
+      //	converted_value = 0;
+
+      value = converted_value;
+      return true;
+    }
+  }
+
+  bool GetValueByFieldName(string field_name, string &value)
+  {
+    if (FieldsIndices.find(field_name) == FieldsIndices.end())
+    {
+      return false;
+    }
+    else
+    {
+      if (LineFieldsValue.size() == 0)
+      {
+        return false;
+      }
+
+      unsigned int index = FieldsIndices[field_name];
+      if (index >= LineFieldsValue.size())
+      {
+        return false;
+      }
+      string str_value = LineFieldsValue[index];
+
+      if (str_value.length() <= 0)
+      {
+        return false;
+      }
+
+      value = str_value;
+      return true;
+    }
+  }
+
+  template <class T>
+  bool GetValueBySectionKeyFieldName(string file_name, string section_name, string key_name, string field_name, T &value)
+  {
+    OpenCSVFile(file_name, true);
+
+    while (ReadRecord())
+    {
+      if (LineFieldsValue[0] != section_name || LineFieldsValue[1] != key_name)
+        continue;
+
+      if (FieldsIndices.find(field_name) == FieldsIndices.end())
+      {
+        CloseCSVFile();
+        return false;
+      }
+      else
+      {
+        if (LineFieldsValue.size() == 0)
+        {
+          CloseCSVFile();
+          return false;
+        }
+
+        int size = (int)(LineFieldsValue.size());
+        if (FieldsIndices[field_name] >= size)
+        {
+          CloseCSVFile();
+          return false;
+        }
+
+        string str_value = LineFieldsValue[FieldsIndices[field_name]];
+
+        if (str_value.length() <= 0)
+        {
+          CloseCSVFile();
+          return false;
+        }
+
+        istringstream ss(str_value);
+
+        T converted_value;
+        ss >> converted_value;
+
+        if (/*!ss.eof() || */ ss.fail())
+        {
+
+          CloseCSVFile();
+          return false;
+        }
+
+        value = converted_value;
+        CloseCSVFile();
+        return true;
+      }
+    }
+
+    CloseCSVFile();
+
+    return false;
+  }
+};
+
+template <typename T>
+T **Allocate2DDynamicArray(int nRows, int nCols)
+{
+  T **dynamicArray;
+
+  dynamicArray = new T *[nRows];
+
+  for (int i = 0; i < nRows; i++)
+  {
+    dynamicArray[i] = new T[nCols];
+
+    if (dynamicArray[i] == NULL)
+    {
+      cout << "Error: insufficent memory.";
+      exit(0);
+    }
+  }
+
+  return dynamicArray;
+}
+
+template <typename T>
+void Deallocate2DDynamicArray(T **dArray, int nRows)
+{
+  for (int x = 0; x < nRows; x++)
+  {
+    delete[] dArray[x];
+  }
+
+  delete[] dArray;
+}
 
 FILE *g_pFileLog = nullptr;
 
@@ -76,12 +496,15 @@ void g_Program_stop()
   exit(0);
 };
 
-__int64 g_GetCellID(double x, double y)
+// __int64 g_GetCellID(double x, double y)
+long long g_GetCellID(double x, double y)
 {
-  __int64 xi;
+  // __int64 xi;
+  long long xi;
   xi = floor(x / g_GridResolution);
 
-  __int64 yi;
+  // __int64 yi;
+  long long yi;
   yi = floor(y / g_GridResolution);
 
   return xi * 1000000 + yi;
@@ -306,8 +729,8 @@ CGeometry::CGeometry(string s)
   else if (s.find("POLYGON") != std::string::npos)
   {
     tmp = s.substr(s.find_first_not_of(' '));
-    size_t start_idx = tmp.find('((');
-    size_t end_idx = tmp.find('))');
+    size_t start_idx = tmp.find("((");
+    size_t end_idx = tmp.find("))");
 
     if (start_idx == std::string::npos || end_idx == std::string::npos)
       return;
@@ -481,7 +904,8 @@ public:
   int node_seq_no; // sequence number
   int node_id;     //external node number
   int zone_id;
-  __int64 cell_id;
+  // __int64 cell_id;
+  long long cell_id;
   string name;
   std::vector<int> m_outgoing_link_seq_no_vector;
 
@@ -516,7 +940,8 @@ public:
   }
 
   int link_id;
-  __int64 cell_id;
+  // __int64 cell_id;
+  long long cell_id;
   string name;
   string geometry;
 
@@ -670,7 +1095,8 @@ public:
 
 public:
   GDPoint pt;
-  __int64 cell_id;
+  // __int64 cell_id;
+  long long cell_id;
   int trace_id;
   //double time_interval_no;
   int dd;
@@ -689,7 +1115,8 @@ class GridNodeSet
 public:
   double x;
   double y;
-  __int64 cell_id;
+  // __int64 cell_id;
+  long long cell_id;
   std::vector<int> m_NodeVector;
   std::vector<int> m_LinkNoVector;
   std::vector<CGPSPoint> m_GPSPointVector;
@@ -744,8 +1171,10 @@ public:
   int destination_node_seq_no;
   int origin_zone_id;
   int destination_zone_id;
-  __int64 o_cell_id;
-  __int64 d_cell_id;
+  // __int64 o_cell_id;
+  // __int64 d_cell_id;
+  long long o_cell_id;
+  long long d_cell_id;
 
   float start_time_in_min;
   float end_time_in_min;
@@ -847,7 +1276,7 @@ public:
 
     g_grid_size = max((m_right - m_left) / g_GridResolution + 2, (m_top - m_bottom) / g_GridResolution + 2);
 
-    ASSERT(g_grid_size < MAX_GRID_SIZE_);
+    //ASSERT(g_grid_size < MAX_GRID_SIZE_);
     cout << "g_GridResolution= " << g_GridResolution << ", grid size = " << g_grid_size << endl;
 
     // put nodes into grid cell
@@ -902,7 +1331,8 @@ public:
       int x_key = g_GetCellXID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, m_left);
       int y_key = g_GetCellYID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.y, m_bottom);
 
-      __int64 cell_id = g_GetCellID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, g_agent_vector[agent_no].m_GPSPointVector[g].pt.y);
+      //__int64
+      long long cell_id = g_GetCellID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, g_agent_vector[agent_no].m_GPSPointVector[g].pt.y);
 
       fprintf(g_pFileLog, "trace index %d, trace id: %d, cell %d, %d, %jd \n", g, g_agent_vector[agent_no].m_GPSPointVector[g].trace_id, x_key, y_key);
 
@@ -959,13 +1389,13 @@ public:
 
       double distance = MAX_LABEL_COST_;
 
-      TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
+      //TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
 
-      if (g_link_vector[l].from_node_id == 402 && g_link_vector[l].to_node_id == 131)
-        TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
+      //if (g_link_vector[l].from_node_id == 402 && g_link_vector[l].to_node_id == 131)
+      //  TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
 
-      if (g_link_vector[l].from_node_id == 433 && g_link_vector[l].to_node_id == 341)
-        TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
+      //if (g_link_vector[l].from_node_id == 433 && g_link_vector[l].to_node_id == 341)
+      //  TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
 
       //ill conditioning detection
 
@@ -1042,7 +1472,7 @@ public:
     double min_distance_to_boundary_point = MAX_LABEL_COST_;
     for (int l = 0; l < g_link_vector.size(); l++) // for all links in this cell
     {
-      TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
+      //TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
 
       double distance = MAX_LABEL_COST_;
 
@@ -1192,8 +1622,10 @@ public:
         }
       }
     }
-
-    g_agent_vector[agent_no].avg_GPS_segment_distance = total_GPS_distance / max(1, g_agent_vector[agent_no].m_GPSPointVector.size() - 1);
+    double m_GPSPointVector_size_temp = g_agent_vector[agent_no].m_GPSPointVector.size() - 1;
+    if (m_GPSPointVector_size_temp < 1)
+      m_GPSPointVector_size_temp = 1;
+    g_agent_vector[agent_no].avg_GPS_segment_distance = total_GPS_distance / m_GPSPointVector_size_temp;
 
     IdentifyNetworkONode(agent_no);
     IdentifyNetworkDNode(agent_no);
@@ -1296,24 +1728,24 @@ public:
           {
             int l = m_GridMatrix[x_i][y_i].m_LinkNoVector[local_l];
 
-            if (g_link_vector[l].from_node_id == 207 && g_link_vector[l].to_node_id == 208)
-              TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
+            //if (g_link_vector[l].from_node_id == 207 && g_link_vector[l].to_node_id == 208)
+            //  TRACE("%d->%d\n", g_link_vector[l].from_node_id, g_link_vector[l].to_node_id);
 
             g_link_vector[l].o_distance = MAX_LABEL_COST_;
             g_link_vector[l].d_distance = MAX_LABEL_COST_;
 
-            if (m_GridMatrix[x_i][y_i].m_GPSPointVector[g].trace_id == 4)
-            {
-              if (g_link_vector[l].from_node_id == 10386)
-              {
-                TRACE("");
-              }
-            }
+            // if (m_GridMatrix[x_i][y_i].m_GPSPointVector[g].trace_id == 4)
+            // {
+            //   if (g_link_vector[l].from_node_id == 10386)
+            //   {
+            //     TRACE("");
+            //   }
+            // }
 
-            if (g_link_vector[l].from_node_id == 201 && g_link_vector[l].to_node_id == 202 && m_GridMatrix[x_i][y_i].m_GPSPointVector[g].trace_id == 11)
-            {
-              TRACE("GPS point %d", g);
-            }
+            // if (g_link_vector[l].from_node_id == 201 && g_link_vector[l].to_node_id == 202 && m_GridMatrix[x_i][y_i].m_GPSPointVector[g].trace_id == 11)
+            // {
+            //   TRACE("GPS point %d", g);
+            // }
 
             bool bHitCount = false;
 
@@ -1376,11 +1808,16 @@ public:
 
               if (distance < m_TD_link_generalised_cost_array[l][time_interval]) // TD case
               {
-                if (g_link_vector[l].from_node_id == 201 && g_link_vector[l].to_node_id == 202)
-                {
-                  TRACE("GPS point %d", g);
-                }
-                int offset_in_interval = max(1, g_agent_vector[agent_no].sampling_rate_in_min / g_TimeResolution_inMin);
+                // if (g_link_vector[l].from_node_id == 201 && g_link_vector[l].to_node_id == 202)
+                // {
+                //   TRACE("GPS point %d", g);
+                // }
+
+                //int offset_in_interval = max(1, g_agent_vector[agent_no].sampling_rate_in_min / g_TimeResolution_inMin);
+                int offset_in_interval = g_agent_vector[agent_no].sampling_rate_in_min / g_TimeResolution_inMin;
+                if (offset_in_interval < 1)
+                  offset_in_interval = 1;
+
                 int t0 = max(0, time_interval - offset_in_interval);
                 int t1 = min(time_interval + offset_in_interval, g_TimeRangeInterval);
 
@@ -1861,8 +2298,16 @@ public:
           }
 
           float over_speed_limit_ratio = 0.7;
-          int min_FFTT_in_interval = max(1, g_link_vector[link].FFTT_in_min / g_TimeResolution_inMin * over_speed_limit_ratio + 0.5);
-          int FFTT_in_interval = max(1, g_link_vector[link].FFTT_in_min / g_TimeResolution_inMin + 0.5);
+          //int min_FFTT_in_interval = max(1, g_link_vector[link].FFTT_in_min / g_TimeResolution_inMin * over_speed_limit_ratio + 0.5);
+          int min_FFTT_in_interval = g_link_vector[link].FFTT_in_min / g_TimeResolution_inMin * over_speed_limit_ratio + 0.5;
+          if (min_FFTT_in_interval < 1)
+            min_FFTT_in_interval = 1;
+
+          //int FFTT_in_interval = max(1, g_link_vector[link].FFTT_in_min / g_TimeResolution_inMin + 0.5);
+          int FFTT_in_interval = g_link_vector[link].FFTT_in_min / g_TimeResolution_inMin + 0.5;
+          if (FFTT_in_interval < 1)
+            FFTT_in_interval = 1;
+
           int stage_size = 10;
           int max_TT_in_interval = max(1, max(max_TT_Dwell_time_in_int, FFTT_in_interval * stage_size));
           int step_size = 1;
@@ -2332,7 +2777,8 @@ void g_ReadInputData()
         zone_id = node_id;
       }
 
-      __int64 cell_id = g_GetCellID(node.pt.x, node.pt.y);
+      //__int64
+      long long cell_id = g_GetCellID(node.pt.x, node.pt.y);
 
       if (zone_id > 0) // zone id is feasible
       {
@@ -2505,7 +2951,8 @@ bool g_ReadInputAgentCSVFile()
           if (l < time_sequence.size())
             GPSPoint.global_time_in_second = time_sequence[l];
 
-          __int64 cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
+          //__int64
+          long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
 
           if (g_cell_id_2_zone_id_map.find(cell_id) != g_cell_id_2_zone_id_map.end()) //only consider the GPS points passing through the subarea
           {
@@ -2610,7 +3057,8 @@ void g_ReadTraceCSVFile()
       GPSPoint.global_time_in_second = hh * 3600 + mm * 60 + ss;
       GPSPoint.dd = dd;
 
-      __int64 cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
+      //__int64
+      long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
 
       if (g_cell_id_2_zone_id_map.find(cell_id) != g_cell_id_2_zone_id_map.end()) //only consider the GPS points passing through the subarea
       {
@@ -2649,7 +3097,10 @@ void g_ReadTraceCSVFile()
       fprintf(g_pFileLog, "agent index %s, GPS point size = %d \n", g_agent_vector[a_i].agent_id.c_str(), g_agent_vector[a_i].m_GPSPointVector.size());
     }
 
-    g_TimeRangeInterval = max((g_EndTimeinMin - g_StartTimeinMin) / g_TimeResolution_inMin + 1, 10);
+    //g_TimeRangeInterval = max((g_EndTimeinMin - g_StartTimeinMin) / g_TimeResolution_inMin + 1, 10);
+    g_TimeRangeInterval = (g_EndTimeinMin - g_StartTimeinMin) / g_TimeResolution_inMin + 1;
+    if (g_TimeRangeInterval < 10)
+      g_TimeRangeInterval = 10;
 
     gps_parser.CloseCSVFile();
   }
@@ -2760,7 +3211,7 @@ void g_OutputAgentCSVFile()
       for (int i = 0; i < p_agent->path_link_vector.size(); i++)
       {
         int link_no = p_agent->path_link_vector[i];
-        ASSERT(link_no >= 0);
+        //ASSERT(link_no >= 0);
 
         for (int gl = 0; gl < g_link_vector[link_no].m_PointVector.size(); gl++)
         {
@@ -2790,7 +3241,8 @@ void g_OutputCell2ZoneCSVFile()
   {
     fprintf(g_pFileCell2Zone, "cell_id,zone_id\n");
 
-    map<__int64, int>::iterator it;
+    // map<__int64, int>::iterator it;
+    map<long long, int>::iterator it;
 
     for (it = g_cell_id_2_zone_id_map.begin(); it != g_cell_id_2_zone_id_map.end(); it++)
     {
@@ -2900,7 +3352,7 @@ void g_OutputLinklikelihoodCSVFile()
         int from_node_id = g_link_vector[a].from_node_id;
         int to_node_id = g_link_vector[a].to_node_id;
         ;
-        fprintf(g_pFileLinkRoute, "%d,%d,%jd,%d,%f,%f,%f,%d,%d,%d,%f,%f,", from_node_id, to_node_id, g_link_vector[a].cell_id, g_link_vector[a].FFTT_in_sec,
+        fprintf(g_pFileLinkRoute, "%d,%d,%jd,%d,%f,%f,%f,%d,%d,%d,%f,", from_node_id, to_node_id, g_link_vector[a].cell_id, g_link_vector[a].FFTT_in_sec,
                 g_link_vector[a].likelihood_distance, g_link_vector[a].o_distance, g_link_vector[a].d_distance, g_link_vector[a].AccessibilityTime,
 
                 g_link_vector[a].hit_count, g_link_vector[a].use_count, g_link_vector[a].balance);
@@ -2945,7 +3397,7 @@ void g_OutputTDRouteCSVFile()
       {
         int link_no = p_agent->path_link_vector[i];
 
-        ASSERT(link_no >= 0);
+        //ASSERT(link_no >= 0);
 
         cumu_distance += g_link_vector[link_no].length;
         float time_in_min = g_GetTimeInMinFromInterval(p_agent->path_time_vector[i]);
@@ -3049,8 +3501,8 @@ bool g_LikelyRouteFinding()
   fprintf(g_pFileLog, "end of optimization process\n");
   return true;
 }
-int main(int argc)
-//void MapMatching4GMNS(int mode)
+// int main(int argc)
+void MapMatching4GMNS()
 {
   clock_t start_t, end_t, total_t;
   g_pFileLog = fopen("log.txt", "w");
