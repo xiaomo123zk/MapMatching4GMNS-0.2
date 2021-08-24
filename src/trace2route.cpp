@@ -61,7 +61,7 @@ using std::min;
 map<int, int> g_internal_node_seq_no_map;
 map<int, int> g_internal_link_no_map;
 map<string, int> g_internal_agent_no_map;
-map<__int64, int> g_cell_id_2_zone_id_map; // cell 2 zone mapping
+map<long long, int> g_cell_id_2_zone_id_map; // cell 2 zone mapping
 
 FILE *g_pFileLog = nullptr;
 
@@ -76,15 +76,19 @@ void g_Program_stop()
   exit(0);
 };
 
-__int64 g_GetCellID(double x, double y)
+long long g_GetCellID(double x, double y, double grid_resolution)
 {
-  __int64 xi;
-  xi = floor(x / g_GridResolution);
+  long long xi;
+  xi = floor(x / grid_resolution);
 
-  __int64 yi;
-  yi = floor(y / g_GridResolution);
+  long long yi;
+  yi = floor(y / grid_resolution);
 
-  return xi * 1000000 + yi;
+  long long x_code, y_code, code;
+  x_code = fabs(xi) * grid_resolution * 1000000000000;
+  y_code = fabs(yi) * grid_resolution * 100000;
+  code = x_code + y_code;
+  return code;
 };
 
 int g_GetCellXID(double x, double x_min)
@@ -481,7 +485,7 @@ public:
   int node_seq_no; // sequence number
   int node_id;     //external node number
   int zone_id;
-  __int64 cell_id;
+  long long cell_id;
   string name;
   std::vector<int> m_outgoing_link_seq_no_vector;
 
@@ -516,7 +520,7 @@ public:
   }
 
   int link_id;
-  __int64 cell_id;
+  long long cell_id;
   string name;
   string geometry;
 
@@ -670,7 +674,7 @@ public:
 
 public:
   GDPoint pt;
-  __int64 cell_id;
+  long long cell_id;
   int trace_id;
   //double time_interval_no;
   int dd;
@@ -689,7 +693,7 @@ class GridNodeSet
 public:
   double x;
   double y;
-  __int64 cell_id;
+  long long cell_id;
   std::vector<int> m_NodeVector;
   std::vector<int> m_LinkNoVector;
   std::vector<CGPSPoint> m_GPSPointVector;
@@ -744,8 +748,8 @@ public:
   int destination_node_seq_no;
   int origin_zone_id;
   int destination_zone_id;
-  __int64 o_cell_id;
-  __int64 d_cell_id;
+  long long o_cell_id;
+  long long d_cell_id;
 
   float start_time_in_min;
   float end_time_in_min;
@@ -868,7 +872,7 @@ public:
       int y_key = g_GetCellYID(g_node_vector[g_link_vector[l].from_node_seq_no].pt.y, m_bottom);
 
       m_GridMatrix[x_key][y_key].m_LinkNoVector.push_back(l);
-      g_link_vector[l].cell_id = g_GetCellID(g_node_vector[g_link_vector[l].from_node_seq_no].pt.x, g_node_vector[g_link_vector[l].from_node_seq_no].pt.y);
+      g_link_vector[l].cell_id = g_GetCellID(g_node_vector[g_link_vector[l].from_node_seq_no].pt.x, g_node_vector[g_link_vector[l].from_node_seq_no].pt.y, g_GridResolution);
 
       int from_x_key = x_key;
       int from_y_key = y_key;
@@ -902,7 +906,7 @@ public:
       int x_key = g_GetCellXID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, m_left);
       int y_key = g_GetCellYID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.y, m_bottom);
 
-      __int64 cell_id = g_GetCellID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, g_agent_vector[agent_no].m_GPSPointVector[g].pt.y);
+      long long cell_id = g_GetCellID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, g_agent_vector[agent_no].m_GPSPointVector[g].pt.y, g_GridResolution);
 
       fprintf(g_pFileLog, "trace index %d, trace id: %d, cell %d, %d, %jd \n", g, g_agent_vector[agent_no].m_GPSPointVector[g].trace_id, x_key, y_key);
 
@@ -2332,7 +2336,7 @@ void g_ReadInputData()
         zone_id = node_id;
       }
 
-      __int64 cell_id = g_GetCellID(node.pt.x, node.pt.y);
+      long long cell_id = g_GetCellID(node.pt.x, node.pt.y, g_GridResolution);
 
       if (zone_id > 0) // zone id is feasible
       {
@@ -2505,7 +2509,7 @@ bool g_ReadInputAgentCSVFile()
           if (l < time_sequence.size())
             GPSPoint.global_time_in_second = time_sequence[l];
 
-          __int64 cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
+          long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y, g_GridResolution);
 
           if (g_cell_id_2_zone_id_map.find(cell_id) != g_cell_id_2_zone_id_map.end()) //only consider the GPS points passing through the subarea
           {
@@ -2610,7 +2614,7 @@ void g_ReadTraceCSVFile()
       GPSPoint.global_time_in_second = hh * 3600 + mm * 60 + ss;
       GPSPoint.dd = dd;
 
-      __int64 cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
+      long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y, g_GridResolution);
 
       if (g_cell_id_2_zone_id_map.find(cell_id) != g_cell_id_2_zone_id_map.end()) //only consider the GPS points passing through the subarea
       {
@@ -2790,7 +2794,7 @@ void g_OutputCell2ZoneCSVFile()
   {
     fprintf(g_pFileCell2Zone, "cell_id,zone_id\n");
 
-    map<__int64, int>::iterator it;
+    map<long long, int>::iterator it;
 
     for (it = g_cell_id_2_zone_id_map.begin(); it != g_cell_id_2_zone_id_map.end(); it++)
     {

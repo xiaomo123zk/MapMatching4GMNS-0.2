@@ -496,18 +496,32 @@ void g_Program_stop()
   exit(0);
 };
 
-// __int64 g_GetCellID(double x, double y)
-long long g_GetCellID(double x, double y)
+// long long g_GetCellID(double x, double y)
+// {
+//   // __int64 xi;
+//   long long xi;
+//   xi = floor(x / g_GridResolution);
+
+//   // __int64 yi;
+//   long long yi;
+//   yi = floor(y / g_GridResolution);
+
+//   return xi * 1000000 + yi;
+// };
+
+long long g_GetCellID(double x, double y, double grid_resolution)
 {
-  // __int64 xi;
   long long xi;
-  xi = floor(x / g_GridResolution);
+  xi = floor(x / grid_resolution);
 
-  // __int64 yi;
   long long yi;
-  yi = floor(y / g_GridResolution);
+  yi = floor(y / grid_resolution);
 
-  return xi * 1000000 + yi;
+  long long x_code, y_code, code;
+  x_code = fabs(xi) * grid_resolution * 1000000000000;
+  y_code = fabs(yi) * grid_resolution * 100000;
+  code = x_code + y_code;
+  return code;
 };
 
 int g_GetCellXID(double x, double x_min)
@@ -1297,7 +1311,7 @@ public:
       int y_key = g_GetCellYID(g_node_vector[g_link_vector[l].from_node_seq_no].pt.y, m_bottom);
 
       m_GridMatrix[x_key][y_key].m_LinkNoVector.push_back(l);
-      g_link_vector[l].cell_id = g_GetCellID(g_node_vector[g_link_vector[l].from_node_seq_no].pt.x, g_node_vector[g_link_vector[l].from_node_seq_no].pt.y);
+      g_link_vector[l].cell_id = g_GetCellID(g_node_vector[g_link_vector[l].from_node_seq_no].pt.x, g_node_vector[g_link_vector[l].from_node_seq_no].pt.y, g_GridResolution);
 
       int from_x_key = x_key;
       int from_y_key = y_key;
@@ -1332,7 +1346,7 @@ public:
       int y_key = g_GetCellYID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.y, m_bottom);
 
       //__int64
-      long long cell_id = g_GetCellID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, g_agent_vector[agent_no].m_GPSPointVector[g].pt.y);
+      long long cell_id = g_GetCellID(g_agent_vector[agent_no].m_GPSPointVector[g].pt.x, g_agent_vector[agent_no].m_GPSPointVector[g].pt.y, g_GridResolution);
 
       fprintf(g_pFileLog, "trace index %d, trace id: %d, cell %d, %d, %jd \n", g, g_agent_vector[agent_no].m_GPSPointVector[g].trace_id, x_key, y_key);
 
@@ -2778,7 +2792,7 @@ void g_ReadInputData()
       }
 
       //__int64
-      long long cell_id = g_GetCellID(node.pt.x, node.pt.y);
+      long long cell_id = g_GetCellID(node.pt.x, node.pt.y, g_GridResolution);
 
       if (zone_id > 0) // zone id is feasible
       {
@@ -2952,7 +2966,7 @@ bool g_ReadInputAgentCSVFile()
             GPSPoint.global_time_in_second = time_sequence[l];
 
           //__int64
-          long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
+          long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y, g_GridResolution);
 
           if (g_cell_id_2_zone_id_map.find(cell_id) != g_cell_id_2_zone_id_map.end()) //only consider the GPS points passing through the subarea
           {
@@ -3058,7 +3072,7 @@ void g_ReadTraceCSVFile()
       GPSPoint.dd = dd;
 
       //__int64
-      long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y);
+      long long cell_id = g_GetCellID(GPSPoint.pt.x, GPSPoint.pt.y, g_GridResolution);
 
       if (g_cell_id_2_zone_id_map.find(cell_id) != g_cell_id_2_zone_id_map.end()) //only consider the GPS points passing through the subarea
       {
@@ -3501,8 +3515,8 @@ bool g_LikelyRouteFinding()
   fprintf(g_pFileLog, "end of optimization process\n");
   return true;
 }
-// int main(int argc)
-void MapMatching4GMNS()
+int main(int argc)
+// void MapMatching4GMNS()
 {
   clock_t start_t, end_t, total_t;
   g_pFileLog = fopen("log.txt", "w");
